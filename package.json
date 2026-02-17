@@ -1,0 +1,24 @@
+{
+  "name": "reddit-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only Reddit MCP server (public JSON endpoints)",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts",
+    "start:node": "node --loader tsx src/index.ts",
+    "test": "bun test",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "bun-types": "^1.3.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
