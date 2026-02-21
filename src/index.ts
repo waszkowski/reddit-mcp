@@ -37,7 +37,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "reddit.list_subreddit_posts",
+        name: "reddit_list_subreddit_posts",
         description: "List public posts from a subreddit.",
         inputSchema: {
           type: "object",
@@ -52,7 +52,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "reddit.get_post",
+        name: "reddit_get_post",
         description: "Get details of a single public Reddit post by ID or URL.",
         inputSchema: {
           type: "object",
@@ -63,7 +63,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "reddit.get_comments",
+        name: "reddit_get_comments",
         description: "Get comments for a public Reddit post.",
         inputSchema: {
           type: "object",
@@ -77,7 +77,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "reddit.search",
+        name: "reddit_search",
         description: "Search public Reddit posts globally or within a subreddit.",
         inputSchema: {
           type: "object",
@@ -93,7 +93,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "reddit.read_large_result",
+        name: "reddit_read_large_result",
         description:
           "Read a large tool-result file in chunks. Use this when Claude reports output too large and gives a file path.",
         inputSchema: {
@@ -116,27 +116,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      case "reddit.list_subreddit_posts": {
+      case "reddit_list_subreddit_posts": {
         const input = parse(listSubredditPostsSchema, args);
         const result = await redditService.listSubredditPosts(input);
         return ok(result, { maxStringChars: 700, maxArrayItems: 25 });
       }
-      case "reddit.get_post": {
+      case "reddit_get_post": {
         const input = parse(getPostSchema, args);
         const result = await redditService.getPost(input);
         return ok(result, { maxStringChars: 8_000, maxArrayItems: 50 });
       }
-      case "reddit.get_comments": {
+      case "reddit_get_comments": {
         const input = parse(getCommentsSchema, args);
         const result = await redditService.getComments(input);
         return ok(result, { maxStringChars: 900, maxArrayItems: 50 });
       }
-      case "reddit.search": {
+      case "reddit_search": {
         const input = parse(searchSchema, args);
         const result = await redditService.search(input);
         return ok(result, { maxStringChars: 600, maxArrayItems: 25 });
       }
-      case "reddit.read_large_result": {
+      case "reddit_read_large_result": {
         const input = parse(readLargeResultSchema, args);
         const result = await largeResultReader.readChunk(input);
         return ok(result, { maxStringChars: 8_000, maxArrayItems: 50 });
