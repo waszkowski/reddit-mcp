@@ -1,9 +1,9 @@
 {
   "name": "reddit-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Read-only Reddit MCP server (public JSON endpoints)",
+  "description": "Read-only Reddit MCP server (Arctic-Shift archive backend)",
   "scripts": {
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",

@@ -1,5 +1,6 @@
-export type ListingSort = "hot" | "new" | "top" | "rising";
-export type SearchSort = "relevance" | "hot" | "top" | "new" | "comments";
+export type ListingSort = "new" | "top";
+export type SearchSort = "relevance" | "new" | "top";
+export type CommentSort = "top" | "new" | "old";
 export type Timeframe = "hour" | "day" | "week" | "month" | "year" | "all";
 
 export type RedditPost = {
@@ -16,7 +17,6 @@ export type RedditPost = {
   nsfw: boolean;
   spoiler: boolean;
   flair: string | null;
-  source: "json";
 };
 
 export type RedditComment = {
@@ -41,8 +41,9 @@ export type ListPostsInput = {
 };
 
 export type SearchInput = {
-  query: string;
+  query?: string;
   subreddit?: string;
+  author?: string;
   sort: SearchSort;
   timeframe: Timeframe;
   limit: number;
@@ -55,7 +56,7 @@ export type GetPostInput = {
 };
 
 export type GetCommentsInput = GetPostInput & {
-  sort: "confidence" | "top" | "new" | "controversial" | "old" | "qa";
+  sort: CommentSort;
   limit: number;
   depth: number;
 };
@@ -63,18 +64,15 @@ export type GetCommentsInput = GetPostInput & {
 export type PostListResult = {
   posts: RedditPost[];
   nextCursor: string | null;
-  source: "json";
 };
 
 export type PostResult = {
   post: RedditPost;
-  source: "json";
 };
 
 export type CommentsResult = {
   postId: string;
   comments: RedditComment[];
-  source: "json";
 };
 
 export type SearchResult = PostListResult;
