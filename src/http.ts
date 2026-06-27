@@ -2,11 +2,11 @@ import { UpstreamError } from "./errors.js";
 
 const DEFAULT_USER_AGENT = "reddit-mcp/0.2 (read-only personal MCP; Arctic-Shift backend)";
 
-export type JsonResponse<T> = {
+type JsonResponse<T> = {
   data: T;
 };
 
-export type TextResponse = {
+type TextResponse = {
   data: string;
 };
 

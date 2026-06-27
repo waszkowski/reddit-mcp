@@ -2,13 +2,13 @@ import { open, stat } from "node:fs/promises";
 import path from "node:path";
 import { UpstreamError } from "./errors.js";
 
-export type ReadChunkInput = {
+type ReadChunkInput = {
   filePath: string;
   offset: number;
   limit: number;
 };
 
-export type ReadChunkResult = {
+type ReadChunkResult = {
   filePath: string;
   offset: number;
   limit: number;
