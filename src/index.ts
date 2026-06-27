@@ -5,7 +5,7 @@ import { z } from "zod";
 import { UpstreamError } from "./errors.js";
 import { HttpClient } from "./http.js";
 import { LargeResultReader } from "./large-result-reader.js";
-import { RedditJsonClient } from "./reddit-json-client.js";
+import { ArcticShiftClient } from "./arctic-shift-client.js";
 import { RedditService } from "./reddit-service.js";
 import {
   getCommentsSchema,
@@ -18,7 +18,7 @@ import {
 const server = new Server(
   {
     name: "reddit-mcp",
-    version: "0.1.0",
+    version: "0.2.0",
   },
   {
     capabilities: {
@@ -28,8 +28,8 @@ const server = new Server(
 );
 
 const http = new HttpClient();
-const redditJsonClient = new RedditJsonClient(http);
-const redditService = new RedditService(redditJsonClient);
+const redditClient = new ArcticShiftClient(http);
+const redditService = new RedditService(redditClient);
 const largeResultReader = new LargeResultReader();
 const MAX_OUTPUT_CHARS = Number(process.env.MCP_MAX_OUTPUT_CHARS ?? 60_000);
 
@@ -38,12 +38,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "reddit_list_subreddit_posts",
-        description: "List public posts from a subreddit.",
+        description:
+          "List public posts from a subreddit (via the Arctic-Shift archive; data lags ~24-48h). sort: 'new' is exact chronological order; 'top' returns the highest-scoring posts within the timeframe window. Paginate 'new' with the returned nextCursor.",
         inputSchema: {
           type: "object",
           properties: {
             subreddit: { type: "string" },
-            sort: { type: "string", enum: ["hot", "new", "top", "rising"] },
+            sort: { type: "string", enum: ["new", "top"] },
             limit: { type: "number", minimum: 1, maximum: 25 },
             after: { type: "string" },
             timeframe: { type: "string", enum: ["hour", "day", "week", "month", "year", "all"] },
@@ -53,7 +54,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "reddit_get_post",
-        description: "Get details of a single public Reddit post by ID or URL.",
+        description:
+          "Get details of a single public Reddit post by ID or URL. Accepts a postId (t3_… or bare id), a /comments/<id>/ permalink, or a redd.it/<id> short link.",
         inputSchema: {
           type: "object",
           properties: {
@@ -64,13 +66,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "reddit_get_comments",
-        description: "Get comments for a public Reddit post.",
+        description:
+          "Get comments for a public Reddit post (full thread via the Arctic-Shift archive, reconstructed into a tree). sort: 'top' by score, 'new'/'old' by time. depth limits nesting; limit caps the total returned.",
         inputSchema: {
           type: "object",
           properties: {
             postId: { type: "string" },
             postUrl: { type: "string" },
-            sort: { type: "string", enum: ["confidence", "top", "new", "controversial", "old", "qa"] },
+            sort: { type: "string", enum: ["top", "new", "old"] },
             limit: { type: "number", minimum: 1, maximum: 50 },
             depth: { type: "number", minimum: 1, maximum: 6 },
           },
@@ -78,13 +81,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "reddit_search",
-        description: "Search public Reddit posts globally or within a subreddit.",
+        description:
+          "Search public Reddit posts. With a subreddit or author, runs a full-text archive search (fresh, full metadata). With only a query, runs a global keyword search via Reddit's RSS feed (cross-subreddit discovery, but rate-limited to ~1 request/minute). Returns post ids/permalinks to feed into reddit_get_post / reddit_get_comments.",
         inputSchema: {
           type: "object",
           properties: {
             query: { type: "string" },
             subreddit: { type: "string" },
-            sort: { type: "string", enum: ["relevance", "hot", "top", "new", "comments"] },
+            author: { type: "string" },
+            sort: { type: "string", enum: ["relevance", "new", "top"] },
             timeframe: { type: "string", enum: ["hour", "day", "week", "month", "year", "all"] },
             limit: { type: "number", minimum: 1, maximum: 25 },
             after: { type: "string" },

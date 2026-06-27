@@ -1,4 +1,3 @@
-import { RedditJsonClient } from "./reddit-json-client.js";
 import {
   CommentsResult,
   GetCommentsInput,
@@ -6,30 +5,31 @@ import {
   ListPostsInput,
   PostListResult,
   PostResult,
+  RedditDataClient,
   SearchInput,
   SearchResult,
 } from "./types.js";
 
 export class RedditService {
-  private readonly jsonClient: RedditJsonClient;
+  private readonly client: RedditDataClient;
 
-  constructor(jsonClient: RedditJsonClient) {
-    this.jsonClient = jsonClient;
+  constructor(client: RedditDataClient) {
+    this.client = client;
   }
 
   listSubredditPosts(input: ListPostsInput): Promise<PostListResult> {
-    return this.jsonClient.listSubredditPosts(input);
+    return this.client.listSubredditPosts(input);
   }
 
   getPost(input: GetPostInput): Promise<PostResult> {
-    return this.jsonClient.getPost(input);
+    return this.client.getPost(input);
   }
 
   getComments(input: GetCommentsInput): Promise<CommentsResult> {
-    return this.jsonClient.getComments(input);
+    return this.client.getComments(input);
   }
 
   search(input: SearchInput): Promise<SearchResult> {
-    return this.jsonClient.search(input);
+    return this.client.search(input);
   }
 }

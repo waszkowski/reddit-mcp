@@ -1,6 +1,13 @@
 # RSS fallback plan (future)
 
-This project is intentionally JSON-only in v1. The fallback below is not implemented yet.
+> **Status update (v0.2).** The primary backend is now the Arctic-Shift archive API, not
+> reddit.com `.json`. The swappable seam this document anticipated already exists:
+> `RedditDataClient` (in `src/types.ts`) is the interface `RedditService` depends on, and the
+> `source` field is a union (`"arctic-shift" | "rss"`). Reddit RSS is also already used for the
+> global keyword search path (`src/rss-search.ts`). A full RSS *fallback* client (for when
+> Arctic-Shift is unavailable) would slot in as another `RedditDataClient` implementation.
+
+This project is intentionally archive-first. The broader fallback below is not implemented yet.
 
 ## Why add RSS fallback later
 - Improve resilience when selected JSON endpoints return 403/429/temporary blocking.

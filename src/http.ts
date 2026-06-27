@@ -1,7 +1,6 @@
 import { UpstreamError } from "./errors.js";
 
-const DEFAULT_USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
+const DEFAULT_USER_AGENT = "reddit-mcp/0.2 (read-only personal MCP; Arctic-Shift backend)";
 
 export type HttpClientOptions = {
   userAgent?: string;
@@ -12,6 +11,11 @@ export type HttpClientOptions = {
 
 export type JsonResponse<T> = {
   data: T;
+  headers: Headers;
+};
+
+export type TextResponse = {
+  data: string;
   headers: Headers;
 };
 
@@ -31,6 +35,12 @@ export class HttpClient {
   async getJson<T>(url: string): Promise<JsonResponse<T>> {
     const response = await this.fetchWithRetry(url, "application/json");
     const data = (await response.json()) as T;
+    return { data, headers: response.headers };
+  }
+
+  async getText(url: string, accept = "application/atom+xml, application/xml, text/xml"): Promise<TextResponse> {
+    const response = await this.fetchWithRetry(url, accept);
+    const data = await response.text();
     return { data, headers: response.headers };
   }
 
@@ -60,6 +70,11 @@ export class HttpClient {
 
         if (response.status === 403) {
           throw new UpstreamError("Upstream forbidden", "FORBIDDEN", 403, false);
+        }
+
+        if (response.status === 400) {
+          const detail = await readErrorDetail(response);
+          throw new UpstreamError(`Bad request to upstream${detail}`, "BAD_INPUT", 400, false);
         }
 
         if (response.status === 429) {
@@ -114,4 +129,20 @@ export class HttpClient {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Best-effort extraction of an upstream error message. Arctic-Shift returns
+ * `{ "data": null, "error": "..." }` with HTTP 400 on invalid parameters.
+ */
+async function readErrorDetail(response: Response): Promise<string> {
+  try {
+    const body = (await response.clone().json()) as { error?: unknown };
+    if (typeof body.error === "string" && body.error.length > 0) {
+      return `: ${body.error}`;
+    }
+  } catch {
+    // Non-JSON body; fall through to no detail.
+  }
+  return "";
 }

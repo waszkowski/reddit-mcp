@@ -1,18 +1,41 @@
 # reddit-mcp
 
-Read-only MCP server for public Reddit content using TypeScript.
+Read-only MCP server for public Reddit content (TypeScript).
 
-## Implemented in v1
-- `reddit.list_subreddit_posts`
-- `reddit.get_post`
-- `reddit.get_comments`
-- `reddit.search`
-- `reddit.read_large_result`
+## Backend: Arctic-Shift archive
 
-## Not in v1
-- No write/create/edit/delete operations.
-- No OAuth flow.
-- No RSS fallback yet (see `docs/rss-fallback-plan.md`).
+Reddit blocks unauthenticated access to its `www.reddit.com/...json` endpoints (HTTP 403),
+and self-service OAuth app creation is closed under the Responsible Builder Policy. This
+server therefore reads from the **[Arctic-Shift](https://github.com/ArthurHeitmann/arctic_shift)
+archive API** (`arctic-shift.photon-reddit.com`) — a free, no-credentials archive that
+covers essentially all public subreddits, posts and comments.
+
+Trade-offs to be aware of:
+- **Latency ~24–48h.** Arctic-Shift ingests continuously, but `score` / `num_comments` are a
+  snapshot frozen ~36h after a post is created; posts younger than ~36h report `score=1` /
+  `num_comments=0`. Comment **content** is captured close to real time.
+- **Sorting is date-based.** Only the sorts that can be honestly reproduced are exposed
+  (see below); `hot` / `rising` and the live ranking algorithms are not available.
+
+## Tools
+- `reddit_list_subreddit_posts` — `sort`: `new` (exact chronological, paginated via
+  `nextCursor`) or `top` (highest score within the `timeframe` window).
+- `reddit_get_post` — by `postId` (`t3_…` or bare id), `/comments/<id>/` permalink, or
+  `redd.it/<id>` short link.
+- `reddit_get_comments` — full thread, reconstructed into a tree. `sort`: `top` / `new` /
+  `old`; `depth` limits nesting; `limit` caps total comments returned.
+- `reddit_search` — see below.
+- `reddit_read_large_result` — chunked reader for oversized tool output.
+
+### Search (hybrid)
+- **Scoped** (with `subreddit` or `author`): full-text search via Arctic-Shift — fresh, full
+  metadata. `sort`: `new` (date, paginated), `top` (by score in window), `relevance` (mapped
+  to `top`, since the archive has no relevance ranking).
+- **Global** (query only): Arctic-Shift cannot do cross-subreddit keyword search, so the
+  query goes to Reddit's own `search.rss` feed for discovery, and the resulting post ids are
+  enriched back into full objects via Arctic-Shift. This path is **rate-limited to ~1
+  request/minute** unless you supply a personal RSS feed token (see env vars below). Use the
+  returned `id` / `permalink` to follow up with `reddit_get_post` / `reddit_get_comments`.
 
 ## Runtime
 Primary runtime is Bun. Node fallback is also possible.
@@ -33,50 +56,42 @@ npm install
 npm run start:node
 ```
 
+## Test / typecheck
+```bash
+bun test
+bun run check
+```
+
 ## Claude MCP config example (Bun)
 ```json
 {
   "mcpServers": {
     "reddit": {
       "command": "bun",
-      "args": ["run", "/absolute/path/to/reddit-mcp/src/index.ts"],
-      "env": {
-        "REDDIT_USER_AGENT": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
-      }
+      "args": ["run", "/absolute/path/to/reddit-mcp/src/index.ts"]
     }
   }
 }
 ```
 
-## Claude MCP config example (Node)
-```json
-{
-  "mcpServers": {
-    "reddit": {
-      "command": "npx",
-      "args": ["tsx", "/absolute/path/to/reddit-mcp/src/index.ts"],
-      "env": {
-        "REDDIT_USER_AGENT": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
-      }
-    }
-  }
-}
-```
+## Environment variables (all optional)
+- `ARCTIC_SHIFT_BASE` — override the Arctic-Shift API base URL.
+- `REDDIT_RSS_USER` + `REDDIT_RSS_FEED` — personal RSS feed token (from Reddit's "RSS feeds"
+  preferences page) to lift the ~1/min throttle on global search. Needs no OAuth app.
+- `REDDIT_USER_AGENT` — override the outgoing User-Agent.
+- `MCP_MAX_OUTPUT_CHARS` (default `60000`) — max response size sent to Claude before
+  truncation.
+- `MCP_TOOL_RESULTS_ROOTS` (comma-separated, default `/sessions`) — file roots readable by
+  `reddit_read_large_result`.
 
 ## Large results workflow
-When Claude says tool output is too large and gives a file path, read it in chunks with:
-- `reddit.read_large_result` with `filePath`, `offset`, `limit`
-- Start with `offset=0`, `limit=8000`
-- Use returned `nextOffset` until `done=true`
+When Claude reports that tool output is too large and gives a file path, read it in chunks with
+`reddit_read_large_result` (`filePath`, `offset`, `limit`): start at `offset=0`, `limit=8000`,
+and follow the returned `nextOffset` until `done=true`.
 
 ## Notes
-- Public data only.
-- `REDDIT_USER_AGENT` can be customized in Claude MCP config.
-- Handle 429/403 upstream responses in the client workflow.
-- Tool payload size protection is enabled in MCP responses:
-  - `limit` is capped (`search/list` max 25, `comments` max 50).
-  - Long text fields are truncated server-side.
-  - If output is still too large, MCP returns a compact truncation message.
-- Optional env:
-  - `MCP_MAX_OUTPUT_CHARS` (default `60000`) to tune max response size sent to Claude.
-  - `MCP_TOOL_RESULTS_ROOTS` (comma-separated, default `/sessions`) to control which file roots are readable by `reddit.read_large_result`.
+- Public data only. No write/create/edit/delete operations. No OAuth.
+- `/s/` share links cannot be resolved offline — pass a `postId` or a `/comments/<id>/` URL.
+- Pagination cursors are epoch seconds and are only returned for `new` listings/searches.
+- Output size protection: `limit` is capped (search/list 25, comments 50), long text fields
+  are truncated, and oversized payloads fall back to a compact truncation message.

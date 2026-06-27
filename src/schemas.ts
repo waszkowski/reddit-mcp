@@ -13,7 +13,7 @@ const pagination = z.object({
 
 export const listSubredditPostsSchema = pagination.extend({
   subreddit: subredditString,
-  sort: z.enum(["hot", "new", "top", "rising"]).default("hot"),
+  sort: z.enum(["new", "top"]).default("new"),
   timeframe: z.enum(["hour", "day", "week", "month", "year", "all"]).optional(),
 });
 
@@ -28,7 +28,7 @@ export const getPostSchema = getPostBaseSchema.refine((value) => Boolean(value.p
 
 export const getCommentsSchema = getPostBaseSchema
   .extend({
-    sort: z.enum(["confidence", "top", "new", "controversial", "old", "qa"]).default("top"),
+    sort: z.enum(["top", "new", "old"]).default("top"),
     limit: z.number().int().min(1).max(50).default(20),
     depth: z.number().int().min(1).max(6).default(3),
   })
@@ -39,7 +39,8 @@ export const getCommentsSchema = getPostBaseSchema
 export const searchSchema = pagination.extend({
   query: z.string().min(1).max(512),
   subreddit: subredditString.optional(),
-  sort: z.enum(["relevance", "hot", "top", "new", "comments"]).default("relevance"),
+  author: z.string().min(1).max(100).optional(),
+  sort: z.enum(["relevance", "new", "top"]).default("relevance"),
   timeframe: z.enum(["hour", "day", "week", "month", "year", "all"]).default("week"),
 });
 
