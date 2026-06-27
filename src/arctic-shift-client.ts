@@ -21,10 +21,6 @@ const DEFAULT_BASE = "https://arctic-shift.photon-reddit.com/api";
 
 /** Candidate window pulled before a client-side score re-sort (== API per-request max). */
 const RESORT_FETCH = 100;
-/** Safety cap on comment pages (~100 each) so pathological threads can't loop forever. */
-const MAX_COMMENT_PAGES = 10;
-/** Courtesy delay between paginated comment requests (Arctic-Shift asks for a couple req/sec). */
-const REQUEST_DELAY_MS = 300;
 /** Window used for score-based ("top"/"relevance") sorts when no timeframe is given. */
 const DEFAULT_WINDOW: Timeframe = "week";
 
@@ -98,7 +94,7 @@ export class ArcticShiftClient implements RedditDataClient {
 
   async getComments(input: GetCommentsInput): Promise<CommentsResult> {
     const postId = extractPostId(input);
-    const raw = await this.fetchAllComments(postId);
+    const raw = await this.fetchCommentTree(postId);
     const comments = buildCommentTree(raw, postId, input.sort, input.depth).slice(0, input.limit);
     return { postId, comments, source: "arctic-shift" };
   }
@@ -125,6 +121,12 @@ export class ArcticShiftClient implements RedditDataClient {
   }
 
   private async globalSearch(input: SearchInput): Promise<SearchResult> {
+    if (!input.query) {
+      // Reached only when neither subreddit nor author was given; the schema's
+      // refine guarantees a query in that case, but narrow it here for safety.
+      throw new UpstreamError("A query is required for a global (cross-subreddit) search", "BAD_INPUT", undefined, false);
+    }
+
     const ids = await fetchGlobalSearchIds(this.http, {
       query: input.query,
       sort: input.sort,
@@ -139,10 +141,15 @@ export class ArcticShiftClient implements RedditDataClient {
     const rows = await this.fetchPostsByIds(ids);
     let posts = rows.map(mapPost);
 
-    // RSS already returns relevance/new ordering; only "top" needs a re-sort,
-    // which we can do now that enrichment gave us real scores.
     if (input.sort === "top") {
+      // Enrichment gave us real scores, so we can rank by them.
       posts = posts.sort((a, b) => b.score - a.score);
+    } else {
+      // "new"/"relevance": keep the order RSS discovered them in. /posts/ids
+      // does not guarantee the response preserves the requested id order, so
+      // re-impose it explicitly instead of trusting the enrichment order.
+      const rank = new Map(ids.map((id, i) => [id, i]));
+      posts = posts.sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
     }
 
     return { posts: posts.slice(0, input.limit), nextCursor: null, source: "arctic-shift" };
@@ -190,35 +197,17 @@ export class ArcticShiftClient implements RedditDataClient {
     return data.data ?? [];
   }
 
-  private async fetchAllComments(postId: string): Promise<RawRecord[]> {
-    const linkId = `t3_${postId}`;
+  private async fetchCommentTree(postId: string): Promise<RawRecord[]> {
+    const url = new URL(`${this.base}/comments/tree`);
+    url.searchParams.set("link_id", `t3_${postId}`);
+    // The dedicated tree endpoint returns the whole thread in one request.
+    // 9999 is the value Arctic-Shift's own docs use for "all comments" (the
+    // hard ceiling is 25000) — far better than paging the flat search endpoint.
+    url.searchParams.set("limit", "9999");
+
+    const { data } = await this.http.getJson<ArcticEnvelope<RawRecord[]>>(url.toString());
     const collected: RawRecord[] = [];
-    const seen = new Set<string>();
-    let afterSec: number | undefined;
-
-    for (let page = 0; page < MAX_COMMENT_PAGES; page += 1) {
-      const url = new URL(`${this.base}/comments/search`);
-      url.searchParams.set("link_id", linkId);
-      url.searchParams.set("limit", "100");
-      url.searchParams.set("sort", "asc");
-      if (afterSec !== undefined) url.searchParams.set("after", String(afterSec));
-
-      const { data } = await this.http.getJson<ArcticEnvelope<RawRecord[]>>(url.toString());
-      const rows = data.data ?? [];
-      for (const row of rows) {
-        const id = stringOrEmpty(row.id);
-        if (id && !seen.has(id)) {
-          seen.add(id);
-          collected.push(row);
-        }
-      }
-
-      const lastRow = rows[rows.length - 1];
-      if (rows.length < 100 || !lastRow) break;
-      afterSec = numberOrZero(lastRow.created_utc);
-      await sleep(REQUEST_DELAY_MS);
-    }
-
+    flattenCommentNodes(data.data ?? [], collected);
     return collected;
   }
 }
@@ -266,6 +255,25 @@ function parseRedditUrl(raw: string): URL {
 }
 
 // --- comment tree reconstruction ------------------------------------------
+
+/**
+ * Flattens the nested `/api/comments/tree` response into a flat list of raw
+ * comment records, which {@link buildCommentTree} then re-assembles. Each node
+ * is Reddit-style `{ kind, data: { …, replies: { data: { children: [...] } } } }`;
+ * only `t1` (comment) nodes are kept — `more` (collapsed-chain) nodes are skipped.
+ */
+function flattenCommentNodes(nodes: unknown, out: RawRecord[]): void {
+  if (!Array.isArray(nodes)) return;
+  for (const node of nodes) {
+    if (!isRecord(node) || node.kind !== "t1" || !isRecord(node.data)) continue;
+    const data = node.data;
+    out.push(data);
+    const replies = data.replies;
+    if (isRecord(replies) && isRecord(replies.data)) {
+      flattenCommentNodes(replies.data.children, out);
+    }
+  }
+}
 
 function buildCommentTree(rows: RawRecord[], postId: string, sort: CommentSort, maxDepth: number): RedditComment[] {
   const byParent = new Map<string, RawRecord[]>();
@@ -423,6 +431,6 @@ function booleanOrFalse(v: unknown): boolean {
   return typeof v === "boolean" ? v : false;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function isRecord(v: unknown): v is RawRecord {
+  return typeof v === "object" && v !== null;
 }

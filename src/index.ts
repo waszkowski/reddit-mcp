@@ -82,7 +82,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "reddit_search",
         description:
-          "Search public Reddit posts. With a subreddit or author, runs a full-text archive search (fresh, full metadata). With only a query, runs a global keyword search via Reddit's RSS feed (cross-subreddit discovery, but rate-limited to ~1 request/minute). Returns post ids/permalinks to feed into reddit_get_post / reddit_get_comments.",
+          "Search public Reddit posts. With a subreddit or author, runs a full-text archive search (fresh, full metadata); query is optional there, so you can also list the newest/top posts of a subreddit or author without a keyword. With only a query (no subreddit/author), runs a global keyword search via Reddit's RSS feed (cross-subreddit discovery, but rate-limited to ~1 request/minute). At least one of query/subreddit/author is required. Returns post ids/permalinks to feed into reddit_get_post / reddit_get_comments.",
         inputSchema: {
           type: "object",
           properties: {
@@ -94,7 +94,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             limit: { type: "number", minimum: 1, maximum: 25 },
             after: { type: "string" },
           },
-          required: ["query"],
         },
       },
       {

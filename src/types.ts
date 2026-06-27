@@ -49,7 +49,7 @@ export type ListPostsInput = {
 };
 
 export type SearchInput = {
-  query: string;
+  query?: string;
   subreddit?: string;
   author?: string;
   sort: SearchSort;

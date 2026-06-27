@@ -29,8 +29,9 @@ Trade-offs to be aware of:
 
 ### Search (hybrid)
 - **Scoped** (with `subreddit` or `author`): full-text search via Arctic-Shift — fresh, full
-  metadata. `sort`: `new` (date, paginated), `top` (by score in window), `relevance` (mapped
-  to `top`, since the archive has no relevance ranking).
+  metadata. `query` is optional here, so this also lists a subreddit's or author's newest/top
+  posts without a keyword. `sort`: `new` (date, paginated), `top` (by score in window),
+  `relevance` (mapped to `top`, since the archive has no relevance ranking).
 - **Global** (query only): Arctic-Shift cannot do cross-subreddit keyword search, so the
   query goes to Reddit's own `search.rss` feed for discovery, and the resulting post ids are
   enriched back into full objects via Arctic-Shift. This path is **rate-limited to ~1

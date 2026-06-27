@@ -36,13 +36,17 @@ export const getCommentsSchema = getPostBaseSchema
     message: "Provide postId or postUrl",
   });
 
-export const searchSchema = pagination.extend({
-  query: z.string().min(1).max(512),
-  subreddit: subredditString.optional(),
-  author: z.string().min(1).max(100).optional(),
-  sort: z.enum(["relevance", "new", "top"]).default("relevance"),
-  timeframe: z.enum(["hour", "day", "week", "month", "year", "all"]).default("week"),
-});
+export const searchSchema = pagination
+  .extend({
+    query: z.string().min(1).max(512).optional(),
+    subreddit: subredditString.optional(),
+    author: z.string().min(1).max(100).optional(),
+    sort: z.enum(["relevance", "new", "top"]).default("relevance"),
+    timeframe: z.enum(["hour", "day", "week", "month", "year", "all"]).default("week"),
+  })
+  .refine((value) => Boolean(value.query || value.subreddit || value.author), {
+    message: "Provide query, subreddit, or author",
+  });
 
 export const readLargeResultSchema = z.object({
   filePath: z.string().min(1),
