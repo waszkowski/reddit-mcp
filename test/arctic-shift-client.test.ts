@@ -41,12 +41,12 @@ function makeHttp(opts: FakeOptions): { http: Http; calls: URL[] } {
       const url = new URL(raw);
       calls.push(url);
       const envelope = opts.json ? opts.json(url) : { data: [] };
-      return { data: envelope as T, headers: new Headers() };
+      return { data: envelope as T };
     },
     async getText(raw: string) {
       const url = new URL(raw);
       calls.push(url);
-      return { data: opts.text ? opts.text(url) : "", headers: new Headers() };
+      return { data: opts.text ? opts.text(url) : "" };
     },
   };
   return { http, calls };
@@ -74,7 +74,6 @@ describe("mapPost", () => {
     expect(post.nsfw).toBe(true);
     expect(post.flair).toBe("News");
     expect(post.url).toBe("https://www.reddit.com/r/rust/comments/abc/title/");
-    expect(post.source).toBe("arctic-shift");
   });
 });
 
@@ -90,7 +89,6 @@ describe("listSubredditPosts", () => {
     const res = await client.listSubredditPosts({ subreddit: "rust", sort: "new", limit: 10 });
 
     expect(res.nextCursor).toBe("100");
-    expect(res.source).toBe("arctic-shift");
     const url = calls[0]!;
     expect(url.pathname.endsWith("/posts/search")).toBe(true);
     expect(url.searchParams.get("subreddit")).toBe("rust");
@@ -168,7 +166,6 @@ describe("search", () => {
     const res = await client.search({ query: "rust", sort: "new", timeframe: "week", limit: 10 });
 
     expect(res.posts.map((p) => p.id).sort()).toEqual(["aaa", "bbb"]);
-    expect(res.source).toBe("arctic-shift");
     const rssCall = calls.find((u) => u.pathname.endsWith("/search.rss"));
     const idsCall = calls.find((u) => u.pathname.endsWith("/posts/ids"));
     expect(rssCall).toBeDefined();

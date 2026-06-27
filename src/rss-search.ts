@@ -3,7 +3,7 @@ import type { SearchSort, Timeframe } from "./types.js";
 
 const REDDIT_SEARCH_RSS = "https://www.reddit.com/search.rss";
 
-export type GlobalSearchInput = {
+type GlobalSearchInput = {
   query: string;
   sort: SearchSort;
   timeframe: Timeframe;

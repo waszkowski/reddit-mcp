@@ -2,21 +2,12 @@ import { UpstreamError } from "./errors.js";
 
 const DEFAULT_USER_AGENT = "reddit-mcp/0.2 (read-only personal MCP; Arctic-Shift backend)";
 
-export type HttpClientOptions = {
-  userAgent?: string;
-  timeoutMs?: number;
-  retries?: number;
-  baseDelayMs?: number;
-};
-
 export type JsonResponse<T> = {
   data: T;
-  headers: Headers;
 };
 
 export type TextResponse = {
   data: string;
-  headers: Headers;
 };
 
 export class HttpClient {
@@ -25,23 +16,23 @@ export class HttpClient {
   private readonly retries: number;
   private readonly baseDelayMs: number;
 
-  constructor(options: HttpClientOptions = {}) {
-    this.userAgent = options.userAgent ?? process.env.REDDIT_USER_AGENT ?? DEFAULT_USER_AGENT;
-    this.timeoutMs = options.timeoutMs ?? 10_000;
-    this.retries = options.retries ?? 2;
-    this.baseDelayMs = options.baseDelayMs ?? 350;
+  constructor() {
+    this.userAgent = process.env.REDDIT_USER_AGENT ?? DEFAULT_USER_AGENT;
+    this.timeoutMs = 10_000;
+    this.retries = 2;
+    this.baseDelayMs = 350;
   }
 
   async getJson<T>(url: string): Promise<JsonResponse<T>> {
     const response = await this.fetchWithRetry(url, "application/json");
     const data = (await response.json()) as T;
-    return { data, headers: response.headers };
+    return { data };
   }
 
-  async getText(url: string, accept = "application/atom+xml, application/xml, text/xml"): Promise<TextResponse> {
-    const response = await this.fetchWithRetry(url, accept);
+  async getText(url: string): Promise<TextResponse> {
+    const response = await this.fetchWithRetry(url, "application/atom+xml, application/xml, text/xml");
     const data = await response.text();
-    return { data, headers: response.headers };
+    return { data };
   }
 
   private async fetchWithRetry(url: string, accept: string): Promise<Response> {

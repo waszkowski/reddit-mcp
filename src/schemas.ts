@@ -53,9 +53,3 @@ export const readLargeResultSchema = z.object({
   offset: z.number().int().min(0).default(0),
   limit: z.number().int().min(256).max(20000).default(8000),
 });
-
-export type ListSubredditPostsArgs = z.infer<typeof listSubredditPostsSchema>;
-export type GetPostArgs = z.infer<typeof getPostSchema>;
-export type GetCommentsArgs = z.infer<typeof getCommentsSchema>;
-export type SearchArgs = z.infer<typeof searchSchema>;
-export type ReadLargeResultArgs = z.infer<typeof readLargeResultSchema>;

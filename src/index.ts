@@ -6,7 +6,6 @@ import { UpstreamError } from "./errors.js";
 import { HttpClient } from "./http.js";
 import { LargeResultReader } from "./large-result-reader.js";
 import { ArcticShiftClient } from "./arctic-shift-client.js";
-import { RedditService } from "./reddit-service.js";
 import {
   getCommentsSchema,
   getPostSchema,
@@ -29,7 +28,6 @@ const server = new Server(
 
 const http = new HttpClient();
 const redditClient = new ArcticShiftClient(http);
-const redditService = new RedditService(redditClient);
 const largeResultReader = new LargeResultReader();
 const MAX_OUTPUT_CHARS = Number(process.env.MCP_MAX_OUTPUT_CHARS ?? 60_000);
 
@@ -122,22 +120,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case "reddit_list_subreddit_posts": {
         const input = parse(listSubredditPostsSchema, args);
-        const result = await redditService.listSubredditPosts(input);
+        const result = await redditClient.listSubredditPosts(input);
         return ok(result, { maxStringChars: 700, maxArrayItems: 25 });
       }
       case "reddit_get_post": {
         const input = parse(getPostSchema, args);
-        const result = await redditService.getPost(input);
+        const result = await redditClient.getPost(input);
         return ok(result, { maxStringChars: 8_000, maxArrayItems: 50 });
       }
       case "reddit_get_comments": {
         const input = parse(getCommentsSchema, args);
-        const result = await redditService.getComments(input);
+        const result = await redditClient.getComments(input);
         return ok(result, { maxStringChars: 900, maxArrayItems: 50 });
       }
       case "reddit_search": {
         const input = parse(searchSchema, args);
-        const result = await redditService.search(input);
+        const result = await redditClient.search(input);
         return ok(result, { maxStringChars: 600, maxArrayItems: 25 });
       }
       case "reddit_read_large_result": {

@@ -10,7 +10,6 @@ import {
   PostListResult,
   PostResult,
   RedditComment,
-  RedditDataClient,
   RedditPost,
   SearchInput,
   SearchResult,
@@ -43,7 +42,7 @@ type PostsSearchParams = {
   beforeSec?: number;
 };
 
-export class ArcticShiftClient implements RedditDataClient {
+export class ArcticShiftClient {
   private readonly http: Http;
   private readonly base: string;
 
@@ -57,7 +56,7 @@ export class ArcticShiftClient implements RedditDataClient {
 
     if (input.sort === "top") {
       const posts = await this.fetchTopWindow({ subreddit }, input.timeframe, input.limit);
-      return { posts, nextCursor: null, source: "arctic-shift" };
+      return { posts, nextCursor: null };
     }
 
     // "new": straight chronological, paginated by the oldest item's timestamp.
@@ -68,7 +67,7 @@ export class ArcticShiftClient implements RedditDataClient {
       beforeSec: parseCursor(input.after),
     });
     const posts = rows.map(mapPost);
-    return { posts, nextCursor: lastCreatedCursor(rows), source: "arctic-shift" };
+    return { posts, nextCursor: lastCreatedCursor(rows) };
   }
 
   async search(input: SearchInput): Promise<SearchResult> {
@@ -89,14 +88,14 @@ export class ArcticShiftClient implements RedditDataClient {
     if (!raw) {
       throw new UpstreamError("Post not found", "NOT_FOUND", 404, false);
     }
-    return { post: mapPost(raw), source: "arctic-shift" };
+    return { post: mapPost(raw) };
   }
 
   async getComments(input: GetCommentsInput): Promise<CommentsResult> {
     const postId = extractPostId(input);
     const raw = await this.fetchCommentTree(postId);
     const comments = buildCommentTree(raw, postId, input.sort, input.depth).slice(0, input.limit);
-    return { postId, comments, source: "arctic-shift" };
+    return { postId, comments };
   }
 
   // --- search modes -------------------------------------------------------
@@ -111,13 +110,13 @@ export class ArcticShiftClient implements RedditDataClient {
         limit: input.limit,
         beforeSec: parseCursor(input.after),
       });
-      return { posts: rows.map(mapPost), nextCursor: lastCreatedCursor(rows), source: "arctic-shift" };
+      return { posts: rows.map(mapPost), nextCursor: lastCreatedCursor(rows) };
     }
 
     // "top" and "relevance" (Arctic-Shift has no relevance ranking) → best by
     // score within the timeframe window.
     const posts = await this.fetchTopWindow({ subreddit, author, query: input.query }, input.timeframe, input.limit);
-    return { posts, nextCursor: null, source: "arctic-shift" };
+    return { posts, nextCursor: null };
   }
 
   private async globalSearch(input: SearchInput): Promise<SearchResult> {
@@ -135,7 +134,7 @@ export class ArcticShiftClient implements RedditDataClient {
     });
 
     if (ids.length === 0) {
-      return { posts: [], nextCursor: null, source: "arctic-shift" };
+      return { posts: [], nextCursor: null };
     }
 
     const rows = await this.fetchPostsByIds(ids);
@@ -152,7 +151,7 @@ export class ArcticShiftClient implements RedditDataClient {
       posts = posts.sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
     }
 
-    return { posts: posts.slice(0, input.limit), nextCursor: null, source: "arctic-shift" };
+    return { posts: posts.slice(0, input.limit), nextCursor: null };
   }
 
   // --- low-level fetch helpers -------------------------------------------
@@ -334,11 +333,10 @@ export function mapPost(raw: RawRecord | undefined): RedditPost {
     nsfw: booleanOrFalse(raw?.over_18),
     spoiler: booleanOrFalse(raw?.spoiler),
     flair: optionalString(raw?.link_flair_text),
-    source: "arctic-shift",
   };
 }
 
-export function mapComment(raw: RawRecord, postId: string, depth: number): RedditComment {
+function mapComment(raw: RawRecord, postId: string, depth: number): RedditComment {
   const parentRaw = stringOrEmpty(raw.parent_id);
   const parentId = parentRaw.startsWith("t1_") ? parentRaw.slice(3) : null;
 
@@ -378,7 +376,6 @@ function timeframeToSeconds(timeframe: Timeframe): number {
       return 2_592_000;
     case "year":
       return 31_536_000;
-    case "all":
     default:
       return Number.MAX_SAFE_INTEGER;
   }
