@@ -37,7 +37,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "reddit_list_subreddit_posts",
         description:
-          "List public posts from a subreddit (via the Arctic-Shift archive; data lags ~24-48h). sort: 'new' is exact chronological order; 'top' returns the highest-scoring posts within the timeframe window. Paginate 'new' with the returned nextCursor.",
+          "List public posts from a subreddit via the Arctic-Shift archive (data lags ~24-48h; score and comment counts are a snapshot frozen ~36h after posting, so very recent posts show score 1 / 0 comments). sort='new' is exact chronological order — paginate with the returned nextCursor. sort='top' ranks by score across up to ~500 of the most recent posts in the timeframe window (paged newest-first); on very active subreddits a long window can hold more than that, in which case the result sets topCoverage.windowFullyScanned=false to flag a partial ranking — for the genuine top of a long period prefer reddit_search with a keyword. timeframe only affects 'top' and defaults to a 1-week window.",
         inputSchema: {
           type: "object",
           properties: {
@@ -53,7 +53,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "reddit_get_post",
         description:
-          "Get details of a single public Reddit post by ID or URL. Accepts a postId (t3_… or bare id), a /comments/<id>/ permalink, or a redd.it/<id> short link.",
+          "Get details of a single public Reddit post by ID or URL. Accepts a postId (t3_… or bare id), a /comments/<id>/ permalink, or a redd.it/<id> short link. Served from the Arctic-Shift archive: score and comment count are a snapshot frozen ~36h after posting, so a post newer than that reports score 1 / 0 comments.",
         inputSchema: {
           type: "object",
           properties: {
@@ -65,7 +65,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "reddit_get_comments",
         description:
-          "Get comments for a public Reddit post (full thread via the Arctic-Shift archive, reconstructed into a tree). sort: 'top' by score, 'new'/'old' by time. depth limits nesting; limit caps the total returned.",
+          "Get comments for a public Reddit post (thread via the Arctic-Shift archive, reconstructed into a tree). sort: 'top' by score, 'new'/'old' by time. depth limits nesting; limit caps the total returned. Caveats: collapsed 'load more' branches are not expanded (some deeply nested replies may be missing), and a freshly posted thread may show no comments until the archive catches up (~24-48h).",
         inputSchema: {
           type: "object",
           properties: {
@@ -80,7 +80,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "reddit_search",
         description:
-          "Search public Reddit posts. With a subreddit or author, runs a full-text archive search (fresh, full metadata); query is optional there, so you can also list the newest/top posts of a subreddit or author without a keyword. With only a query (no subreddit/author), runs a global keyword search via Reddit's RSS feed (cross-subreddit discovery, but rate-limited to ~1 request/minute). At least one of query/subreddit/author is required. Returns post ids/permalinks to feed into reddit_get_post / reddit_get_comments.",
+          "Search public Reddit posts. With a subreddit or author, runs a full-text archive search (Arctic-Shift; fresh, full metadata). The query is matched as AND over every word — each word must appear in the title or body, so filler/extra words shrink results fast; prefer few high-signal keywords. query is optional with a subreddit/author, so you can also list a subreddit's or author's newest/top posts without a keyword. With only a query (no subreddit/author), runs a global cross-subreddit keyword search via Reddit's RSS feed (rate-limited to ~1 request/minute). sort: 'new' = chronological; 'top'/'relevance' = ranked by score. timeframe defaults to 'all' (whole archive); pass a shorter timeframe (hour/day/week/month/year) only to deliberately limit to recent posts. Note: score and comment counts are a snapshot frozen ~36h after posting, so posts newer than that show score 1 / 0 comments. For 'top'/'relevance' with a subreddit/author, the result includes topCoverage.windowFullyScanned (false = ranked over only the newest posts scanned, not the whole window). At least one of query/subreddit/author is required. Returns post ids/permalinks to feed into reddit_get_post / reddit_get_comments.",
         inputSchema: {
           type: "object",
           properties: {

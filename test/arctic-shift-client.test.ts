@@ -52,6 +52,14 @@ function makeHttp(opts: FakeOptions): { http: Http; calls: URL[] } {
   return { http, calls };
 }
 
+/** Builds a page of synthetic posts in descending created_utc order for top-sort tests. */
+function topPage(newest: number, count: number, scoreFor: (createdUtc: number) => number): FlatRow[] {
+  return Array.from({ length: count }, (_, i) => {
+    const created = newest - i;
+    return { id: `p${created}`, created_utc: created, score: scoreFor(created) };
+  });
+}
+
 describe("mapPost", () => {
   test("maps native Arctic-Shift fields to the domain model", () => {
     const post = mapPost({
@@ -120,6 +128,40 @@ describe("listSubredditPosts", () => {
     expect(url.searchParams.get("limit")).toBe("100");
     expect(url.searchParams.get("after")).not.toBeNull();
     expect(url.searchParams.get("before")).not.toBeNull();
+  });
+
+  test("sort=top pages deeper than one window and ranks by score across pages", async () => {
+    // Three pages newest→oldest; the global max score lives in the last page, so a
+    // correct ranking must have paged past the first 100 to surface it.
+    const pages = [
+      topPage(1000, 100, () => 10),
+      topPage(900, 100, () => 20),
+      topPage(800, 50, (created) => (created === 790 ? 999 : 5)),
+    ];
+    let call = 0;
+    const { http, calls } = makeHttp({ json: () => ({ data: pages[call++] ?? [] }) });
+    const client = new ArcticShiftClient(http);
+
+    const res = await client.listSubredditPosts({ subreddit: "rust", sort: "top", limit: 3, timeframe: "all" });
+
+    expect(calls.length).toBe(3); // stopped on the short third page
+    expect(res.posts[0]!.id).toBe("p790"); // highest score, found only by paging
+    expect(res.topCoverage).toEqual({ candidatesScanned: 250, windowFullyScanned: true });
+    // Each page advances the exclusive `before` cursor to the previous page's oldest row.
+    expect(calls[1]!.searchParams.get("before")).toBe("901");
+    expect(calls[2]!.searchParams.get("before")).toBe("801");
+  });
+
+  test("sort=top stops at the candidate cap and flags partial coverage", async () => {
+    const TOP_CANDIDATE_CAP = 500; // default; mirrors ARCTIC_SHIFT_TOP_CAP
+    // Always a full page → the window never runs dry, so the cap must stop the scan.
+    const { http, calls } = makeHttp({ json: () => ({ data: topPage(100_000, 100, () => 1) }) });
+    const client = new ArcticShiftClient(http);
+
+    const res = await client.listSubredditPosts({ subreddit: "rust", sort: "top", limit: 5, timeframe: "all" });
+
+    expect(calls.length).toBe(TOP_CANDIDATE_CAP / 100);
+    expect(res.topCoverage).toEqual({ candidatesScanned: TOP_CANDIDATE_CAP, windowFullyScanned: false });
   });
 });
 

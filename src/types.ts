@@ -61,9 +61,21 @@ export type GetCommentsInput = GetPostInput & {
   depth: number;
 };
 
+/**
+ * Coverage metadata for a score-ranked ("top") listing. Because the archive only
+ * sorts by time, "top" re-ranks a capped window of the most recent posts: when
+ * `windowFullyScanned` is false the ranking is "top among the newest
+ * `candidatesScanned` posts", not the true top of the whole timeframe.
+ */
+export type TopCoverage = {
+  candidatesScanned: number;
+  windowFullyScanned: boolean;
+};
+
 export type PostListResult = {
   posts: RedditPost[];
   nextCursor: string | null;
+  topCoverage?: TopCoverage;
 };
 
 export type PostResult = {

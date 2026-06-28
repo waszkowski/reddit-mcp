@@ -42,7 +42,10 @@ export const searchSchema = pagination
     subreddit: subredditString.optional(),
     author: z.string().min(1).max(100).optional(),
     sort: z.enum(["relevance", "new", "top"]).default("relevance"),
-    timeframe: z.enum(["hour", "day", "week", "month", "year", "all"]).default("week"),
+    // Defaults to the whole archive: a scoped "relevance"/"top" search only
+    // looks inside this window, so a short default (e.g. "week") silently hid
+    // historical matches and returned empty for anything but the freshest posts.
+    timeframe: z.enum(["hour", "day", "week", "month", "year", "all"]).default("all"),
   })
   .refine((value) => Boolean(value.query || value.subreddit || value.author), {
     message: "Provide query, subreddit, or author",

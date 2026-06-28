@@ -14,14 +14,22 @@ import {
   SearchInput,
   SearchResult,
   Timeframe,
+  TopCoverage,
 } from "./types.js";
 
 const DEFAULT_BASE = "https://arctic-shift.photon-reddit.com/api";
 
-/** Candidate window pulled before a client-side score re-sort (== API per-request max). */
+/** Page size for the candidate scan before a client-side score re-sort (== API per-request max). */
 const RESORT_FETCH = 100;
 /** Window used for score-based ("top"/"relevance") sorts when no timeframe is given. */
 const DEFAULT_WINDOW: Timeframe = "week";
+/**
+ * Max posts scanned (paged newest-first by created_utc) before a "top" re-sort
+ * stops and the result is flagged as partial coverage. The archive has no
+ * server-side score sort, so we trade a bounded number of requests for a much
+ * larger ranking pool than a single page; override with ARCTIC_SHIFT_TOP_CAP.
+ */
+const TOP_CANDIDATE_CAP = Number(process.env.ARCTIC_SHIFT_TOP_CAP ?? 500);
 
 type Http = Pick<HttpClient, "getJson" | "getText">;
 
@@ -55,8 +63,8 @@ export class ArcticShiftClient {
     const subreddit = sanitizeSubreddit(input.subreddit);
 
     if (input.sort === "top") {
-      const posts = await this.fetchTopWindow({ subreddit }, input.timeframe, input.limit);
-      return { posts, nextCursor: null };
+      const { posts, topCoverage } = await this.fetchTopWindow({ subreddit }, input.timeframe, input.limit);
+      return { posts, nextCursor: null, topCoverage };
     }
 
     // "new": straight chronological, paginated by the oldest item's timestamp.
@@ -115,8 +123,12 @@ export class ArcticShiftClient {
 
     // "top" and "relevance" (Arctic-Shift has no relevance ranking) → best by
     // score within the timeframe window.
-    const posts = await this.fetchTopWindow({ subreddit, author, query: input.query }, input.timeframe, input.limit);
-    return { posts, nextCursor: null };
+    const { posts, topCoverage } = await this.fetchTopWindow(
+      { subreddit, author, query: input.query },
+      input.timeframe,
+      input.limit,
+    );
+    return { posts, nextCursor: null, topCoverage };
   }
 
   private async globalSearch(input: SearchInput): Promise<SearchResult> {
@@ -156,23 +168,58 @@ export class ArcticShiftClient {
 
   // --- low-level fetch helpers -------------------------------------------
 
+  /**
+   * The archive only sorts by created_utc, so "top" pages the window newest-first
+   * and re-ranks by score client-side. A single page (100) would only ever rank
+   * the last day or two of an active subreddit, so we page deeper up to
+   * {@link TOP_CANDIDATE_CAP}. Hitting the cap before the window is exhausted is
+   * reported as partial coverage rather than silently passed off as a true top.
+   */
   private async fetchTopWindow(
     scope: { subreddit?: string; author?: string; query?: string },
     timeframe: Timeframe | undefined,
     limit: number,
-  ): Promise<RedditPost[]> {
+  ): Promise<{ posts: RedditPost[]; topCoverage: TopCoverage }> {
     const window = buildWindow(timeframe ?? DEFAULT_WINDOW);
-    const rows = await this.fetchPosts({
-      ...scope,
-      sort: "desc",
-      limit: RESORT_FETCH,
-      afterSec: window.afterSec,
-      beforeSec: window.beforeSec,
-    });
-    return rows
+    const rows: RawRecord[] = [];
+    let before = window.beforeSec;
+    let windowFullyScanned = true;
+
+    while (rows.length < TOP_CANDIDATE_CAP) {
+      const page = await this.fetchPosts({
+        ...scope,
+        sort: "desc",
+        limit: RESORT_FETCH,
+        afterSec: window.afterSec,
+        beforeSec: before,
+      });
+      rows.push(...page);
+
+      if (page.length < RESORT_FETCH) {
+        // A short page means the archive ran out of posts in the window.
+        break;
+      }
+
+      if (rows.length >= TOP_CANDIDATE_CAP) {
+        // Cap reached while a full page was still coming back → more posts exist
+        // in the window than we scanned, so the ranking is only partial.
+        windowFullyScanned = false;
+        break;
+      }
+
+      // `before` is exclusive, so advancing to the oldest row's timestamp pages
+      // strictly older. (Ties on created_utc could drop a boundary row; negligible.)
+      const oldest = numberOrZero(page[page.length - 1]?.created_utc);
+      if (oldest <= 0) break;
+      before = oldest;
+    }
+
+    const posts = rows
       .map(mapPost)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
+
+    return { posts, topCoverage: { candidatesScanned: rows.length, windowFullyScanned } };
   }
 
   private async fetchPosts(params: PostsSearchParams): Promise<RawRecord[]> {
